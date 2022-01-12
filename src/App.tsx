@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { FC, useEffect, useRef, useState } from 'react';
 
 import Grid from '@material-ui/core/Grid';
 import TextField from '@material-ui/core/TextField';
 import Switch from '@material-ui/core/Switch';
+import { debounce } from '@material-ui/core';
 
 enum Op {
   Encode,
@@ -21,17 +22,17 @@ function fromBin(str: string) {
   return String.fromCharCode(...new Uint16Array(bytes.buffer));
 }
 
-const b65 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+const B65 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
 
 const s2 = (s: string) => [...s];
 
 const encode = (str: string, dict65: string): string =>
   s2(str)
-    .map((s) => s2(dict65)[b65.indexOf(s)])
+    .map((s) => s2(dict65)[B65.indexOf(s)])
     .join('');
 const decode = (str: string, dict65: string): string =>
   s2(str)
-    .map((s) => b65.charAt(s2(dict65).indexOf(s)))
+    .map((s) => B65.charAt(s2(dict65).indexOf(s)))
     .join('');
 const validate = (str: string, dict65: string): boolean =>
   !s2(str).some((s) => s2(dict65).indexOf(s) < 0);
@@ -50,15 +51,30 @@ function run(op: Op, dict65: string, input: string): string {
 
 const is65 = (dict65: string) => {
   const dict = s2(dict65);
-  return dict.length === 65 && [...new Set(dict)].length === 65;
+  return dict.length === 65 && new Set(dict).size === 65;
 };
 
-const errorStr = s2('<错误>').join('\u200b');
+interface PopState {
+  dict65: string;
+  input: string;
+  op: Op;
+}
 
-function App() {
-  const [dict65, setDict65] = useState(
-    '富强民主文明和谐自由平等公正法治爱国敬业诚信友善热祖为荣服务人崇尚科学辛勤劳动好团结互助实守见义遵纪艰苦奋斗骄赢奇迹感恩进步梦想😊'
-  );
+const ERRSTR = s2('<错误>').join('\u200b');
+
+const DEFAULT_DICT =
+  '富强民主文明和谐自由平等公正法治爱国敬业诚信友善热祖为荣服务人崇尚科学辛勤劳动好团结互助实守见义遵纪艰苦奋斗骄赢奇迹感恩进步梦想😊';
+
+const debouncedPushState = debounce(({ dict65, input, op }: PopState) => {
+  const url = new URL(window.location.href);
+  if (dict65 !== DEFAULT_DICT) url.searchParams.set('d', dict65);
+  if (input) url.searchParams.set('i', input);
+  if (op === Op.Decode) url.searchParams.set('op', 'decode');
+  window.history.pushState({ dict65, input, op }, document.title, url);
+}, 500);
+
+const App: FC = () => {
+  const [dict65, setDict65] = useState(DEFAULT_DICT);
   const [input, setInput] = useState('');
   const [op, setOp] = useState(Op.Encode);
 
@@ -66,14 +82,44 @@ function App() {
 
   const outputRef = useRef<HTMLInputElement>();
 
+  const dictIs65 = is65(dict65);
+
+  const outputError = output === ERRSTR;
+
   useEffect(() => {
-    let out = errorStr;
-    if (is65(dict65))
+    let out = ERRSTR;
+    if (dictIs65)
       try {
         out = run(op, dict65, input);
       } catch (_) {}
     setOutput(out);
-  }, [dict65, input, op]);
+    if (out !== ERRSTR) {
+      debouncedPushState({ dict65, input, op });
+    }
+  }, [dict65, dictIs65, input, op]);
+
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    const d = search.get('d');
+    const i = search.get('i');
+    const o = search.get('o');
+    if (d) setDict65(d);
+    if (i) setInput(i);
+    if (o === 'decode') setOp(Op.Decode);
+    const handlePopstate = ({
+      state: { dict65, input, op },
+    }: {
+      state: PopState;
+    }) => {
+      setDict65(dict65);
+      setInput(input);
+      setOp(op);
+    };
+    window.addEventListener('popstate', handlePopstate);
+    return () => {
+      window.removeEventListener('popstate', handlePopstate);
+    };
+  }, []);
 
   return (
     <div>
@@ -93,7 +139,7 @@ function App() {
             label="字典"
             variant="outlined"
             value={dict65}
-            error={!is65(dict65)}
+            error={!dictIs65}
             helperText="65个唯一字符"
             style={{ width: 300 }}
             onChange={(e) => setDict65(e.currentTarget.value)}
@@ -106,7 +152,7 @@ function App() {
             label="输入"
             variant="outlined"
             value={input}
-            error={output === errorStr && is65(dict65)}
+            error={outputError && dictIs65}
             style={{ width: 300 }}
             onChange={(e) => setInput(e.currentTarget.value)}
           />
@@ -136,9 +182,9 @@ function App() {
             style={{ width: 300 }}
             InputProps={{ readOnly: true }}
             inputRef={outputRef}
-            error={output === errorStr}
+            error={outputError}
             onClick={() => {
-              if (output && output !== errorStr) {
+              if (output && output !== ERRSTR) {
                 outputRef.current?.select();
                 if (navigator.clipboard) navigator.clipboard.writeText(output);
                 else document.execCommand('copy');
@@ -149,6 +195,6 @@ function App() {
       </Grid>
     </div>
   );
-}
+};
 
 export default App;

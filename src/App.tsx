@@ -67,9 +67,12 @@ const DEFAULT_DICT =
 
 const debouncedPushState = debounce(({ dict65, input, op }: PopState) => {
   const url = new URL(window.location.href);
-  if (dict65 !== DEFAULT_DICT) url.searchParams.set('d', dict65);
+  if (dict65 && dict65 !== DEFAULT_DICT) url.searchParams.set('d', dict65);
+  else url.searchParams.delete('d');
   if (input) url.searchParams.set('i', input);
-  if (op === Op.Decode) url.searchParams.set('op', 'decode');
+  else url.searchParams.delete('i');
+  if (op === Op.Decode) url.searchParams.set('o', 'decode');
+  else url.searchParams.delete('o');
   window.history.pushState({ dict65, input, op }, document.title, url);
 }, 500);
 
@@ -87,15 +90,13 @@ const App: FC = () => {
   const outputError = output === ERRSTR;
 
   useEffect(() => {
+    debouncedPushState({ dict65, input, op });
     let out = ERRSTR;
     if (dictIs65)
       try {
         out = run(op, dict65, input);
       } catch (_) {}
     setOutput(out);
-    if (out !== ERRSTR) {
-      debouncedPushState({ dict65, input, op });
-    }
   }, [dict65, dictIs65, input, op]);
 
   useEffect(() => {

@@ -10,16 +10,11 @@ enum Op {
   Decode,
 }
 
-function toBin(str: string) {
-  const codes = new Uint16Array(str.length);
-  for (let i = 0; i < codes.length; i++) codes[i] = str.charCodeAt(i);
-  return btoa(String.fromCharCode(...new Uint8Array(codes.buffer)));
+function utf8_to_b64(str: string) {
+  return btoa(unescape(encodeURIComponent(str)));
 }
-function fromBin(str: string) {
-  const binary = atob(str);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < bytes.length; i++) bytes[i] = binary.charCodeAt(i);
-  return String.fromCharCode(...new Uint16Array(bytes.buffer));
+function b64_to_utf8(str: string) {
+  return decodeURIComponent(escape(atob(str)));
 }
 
 const B65 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
@@ -40,11 +35,11 @@ const validate = (str: string, dict65: string): boolean =>
 function run(op: Op, dict65: string, input: string): string {
   switch (op) {
     case Op.Encode: {
-      return encode(toBin(input), dict65);
+      return encode(utf8_to_b64(input), dict65);
     }
     case Op.Decode: {
       if (!validate(input, dict65)) throw new Error('execution failed');
-      return fromBin(decode(input, dict65));
+      return b64_to_utf8(decode(input, dict65));
     }
   }
 }
